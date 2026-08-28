@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Backlog</title>
+<meta name="theme-color" content="#0E0E10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Backlog compartilhado de jogos.">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --surface:#0E0E10;
+    --raised:#1B1B1F;
+    --raised2:#26262B;
+    --line:#232327;
+    --text:#FFFFFF;
+    --muted:#94949B;
+
+    --espera:#4C9AFF;
+    --jogando:#22D3EE;
+    --pausado:#F5C93A;
+    --indefinido:#9C9CA8;
+    --finalizado:#2EE6A8;
+
+    --pad:16px;
+    --r-g:18px;
+    --r-m:14px;
+    --r-p:11px;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--surface);color:var(--text)}
+
+  body{
+    font-family:'Instrument Sans',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    max-width:480px;margin-inline:auto;min-height:100vh;
+    padding-bottom:calc(100px + env(safe-area-inset-bottom));
+  }
+
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  :focus-visible{outline:2px solid #7C7C88;outline-offset:3px;border-radius:6px}
+
+  /* ================= cabecalho ================= */
+
+  .topo{padding:18px var(--pad) 6px}
+
+  .identidade{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .nome-lista{font-size:25px;font-weight:700;letter-spacing:-.02em;line-height:1.15;color:#fff}
+  .trocar{
+    display:flex;align-items:center;gap:5px;flex:0 0 auto;
+    font-size:11.5px;font-weight:500;color:var(--muted);
+    background:var(--raised2);border-radius:999px;padding:7px 13px;
+    transition:background .18s ease,color .18s ease;
+  }
+  .trocar:hover{background:#313137;color:#fff}
+
+  .painel{display:flex;align-items:center;gap:14px}
+
+  .membros{position:relative;width:64px;height:56px;flex:0 0 auto}
+  .avatar{position:absolute;border-radius:50%}
+  .avatar.eu{
+    left:0;bottom:0;width:52px;height:52px;
+    background:linear-gradient(150deg,#FF9E52,#E04A18);
+  }
+  .avatar.outro{
+    top:0;right:0;width:30px;height:30px;
+    background:linear-gradient(150deg,#8E7BFF,#4B33C4);
+    border:3px solid var(--surface);
+  }
+
+  .metricas{
+    display:flex;gap:7px;flex:1;min-width:0;
+    overflow-x:auto;scroll-snap-type:x proximity;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  }
+  .metricas::-webkit-scrollbar{display:none}
+  .metrica{
+    flex:0 0 auto;min-width:78px;scroll-snap-align:start;
+    cursor:pointer;position:relative;
+    border:1px solid transparent;
+    transition:border-color .18s ease,background .18s ease;
+  }
+  .metrica[aria-pressed="true"]{border-color:rgba(255,255,255,.28);background:var(--raised2,rgba(255,255,255,.07))}
+  .metrica-antiga{
+    flex:1;text-align:center;
+    background:var(--raised);border-radius:var(--r-m);
+    padding:11px 4px 10px;
+  }
+  .metrica .num{font-size:22px;font-weight:700;line-height:1.1;display:block}
+  .metrica .rot{display:block;margin-top:3px;font-size:10px;font-weight:500;color:var(--muted)}
+  /* numeros sem cor: a cor pertence a marca no card, nao ao cabecalho */
+  .metrica .num{color:#FFFFFF}
+
+
+  /* ============ marca de status: canto ou barra ============ */
+
+  .marca{
+    position:absolute;top:6px;right:6px;z-index:2;
+    width:22px;height:22px;border-radius:7px;
+    display:grid;place-items:center;
+    color:#101014;
+    box-shadow:0 1px 7px rgba(0,0,0,.55), inset 0 0 0 1px rgba(0,0,0,.14);
+    transition:opacity .2s ease,transform .2s ease,background .22s ease;
+  }
+  .marca svg{width:13px;height:13px;display:block}
+  .st-espera     .marca{background:var(--espera)}
+  .st-jogando    .marca{background:var(--jogando)}
+  .st-pausado    .marca{background:var(--pausado)}
+  .st-finalizado .marca{background:var(--finalizado)}
+  .st-indefinido .marca{background:var(--indefinido)}
+
+  .st-pausado .lombada{background:var(--pausado)}
+  .st-indefinido .lombada{background:var(--indefinido)}
+  .st-pausado .capa{opacity:.78}
+  .st-indefinido .capa{opacity:.7}
+
+  /* preferencia do usuario */
+  body[data-marca="canto"] .capa .lombada{opacity:0}
+  body[data-marca="barra"] .capa .marca{opacity:0;transform:scale(.8)}
+
+  .st-pausado .etiqueta,.st-pausado .ponto{color:var(--pausado)}
+  .st-indefinido .etiqueta,.st-indefinido .ponto{color:var(--indefinido)}
+  .st-pausado .ponto{background:var(--pausado)}
+  .st-indefinido .ponto{background:var(--indefinido)}
+
+  .pref{
+    margin-left:auto;display:flex;align-items:center;gap:6px;
+    font-size:11px;font-weight:500;color:var(--muted);
+    background:var(--raised);border-radius:var(--r-p);padding:7px 11px;
+  }
+  .pref svg{width:13px;height:13px}
+
+  /* ================= controles ================= */
+
+  .controles{
+    position:sticky;top:0;z-index:10;
+    background:color-mix(in srgb,var(--surface) 92%,transparent);
+    backdrop-filter:blur(16px);
+    display:flex;align-items:center;justify-content:flex-start;
+    padding:16px var(--pad) 10px;
+  }
+  .modos{display:flex;gap:3px;background:var(--raised);border-radius:var(--r-p);padding:3px}
+  .modo{
+    width:40px;height:31px;border-radius:8px;display:grid;place-items:center;
+    color:var(--muted);transition:background .18s ease,color .18s ease;
+  }
+  .modo[aria-pressed="true"]{background:var(--raised2);color:#fff}
+  .modo svg{width:15px;height:15px}
+
+  .dica{padding:2px var(--pad) 0;font-size:11.5px;color:var(--muted)}
+
+  /* ================= grade ================= */
+
+  .grade{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px var(--pad)}
+
+  .card{
+    display:block;width:100%;text-align:left;
+    background:var(--raised);border-radius:var(--r-g);
+    padding:6px 6px 9px;
+    animation:surge .4s ease backwards;
+    transition:background .18s ease;
+  }
+  .card:hover,.card:active{background:#232328}
+  @keyframes surge{from{opacity:0;transform:translateY(7px)}}
+
+  .capa{
+    position:relative;width:100%;aspect-ratio:3/4;
+    border-radius:12px;overflow:hidden;
+    display:grid;place-items:center;padding:7px;
+    /* capa ausente: superficie neutra, nao buraco */
+    background:linear-gradient(155deg,#2B2B31,#1A1A1E 72%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);
+  }
+  /* jogo sem capa vira placa tipografica: o titulo E a capa */
+  .capa .arte{
+    padding:0 2px;
+    font-size:13px;font-weight:700;line-height:1.2;letter-spacing:-.01em;
+    text-align:center;color:rgba(255,255,255,.86);
+    display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;
+  }
+  /* quando existe imagem, a placa some */
+  .capa.tem-imagem{background:#1A1A1E}
+  .capa.tem-imagem .arte{display:none}
+  .capa img,.mini img{
+    position:absolute;inset:0;width:100%;height:100%;
+    object-fit:cover;display:block;animation:revelar .35s ease;
+  }
+  @keyframes revelar{from{opacity:0}}
+
+  .lombada{position:absolute;left:0;right:0;bottom:0;height:4px;transition:background .22s ease}
+  .st-espera .lombada{background:var(--espera)}
+  .st-jogando .lombada{background:var(--jogando)}
+  .st-finalizado .lombada{background:var(--finalizado)}
+  .st-espera .capa{opacity:.6}
+  .st-finalizado .capa{opacity:.85}
+
+  .card.sem-capa .titulo{display:none}
+  .titulo{
+    margin-top:8px;padding:0 3px;
+    font-size:11.5px;font-weight:600;line-height:1.3;color:#fff;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  }
+  .st-espera .titulo{color:var(--muted)}
+
+  /* ================= lista ================= */
+
+  .lista{padding:12px var(--pad) 4px;display:flex;flex-direction:column;gap:9px}
+  .linha{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    background:var(--raised);border-radius:var(--r-m);padding:9px 12px 9px 9px;
+    animation:surge .4s ease backwards;transition:background .18s ease;
+  }
+  .linha:hover{background:#232328}
+  .linha .info,.linha .mini,.linha .etiqueta{cursor:pointer}
+  .linha .mini{
+    position:relative;width:42px;height:56px;flex:0 0 auto;border-radius:9px;overflow:hidden;
+    background:linear-gradient(155deg,#2B2B31,#1A1A1E 72%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);
+  }
+  .linha .mini .lombada{height:3px}
+  .linha .info{flex:1;min-width:0}
+  .linha .nome{font-size:14px;font-weight:600;line-height:1.3;color:#fff}
+  .linha .sub{margin-top:3px;font-size:11.5px;color:var(--muted)}
+
+  .etiqueta{display:flex;align-items:center;gap:6px;flex:0 0 auto;font-size:11.5px;font-weight:500}
+  .etiqueta .ponto{width:7px;height:7px;border-radius:50%}
+  .st-espera .etiqueta{color:var(--espera)}
+  .st-jogando .etiqueta{color:var(--jogando)}
+  .st-finalizado .etiqueta{color:var(--finalizado)}
+  .st-espera .etiqueta .ponto{background:var(--espera)}
+  .st-jogando .etiqueta .ponto{background:var(--jogando)}
+  .st-finalizado .etiqueta .ponto{background:var(--finalizado)}
+
+  /* ================= barra inferior ================= */
+
+  .tabbar{
+    position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+    width:100%;max-width:480px;z-index:20;
+    display:flex;align-items:flex-start;justify-content:space-around;
+    background:color-mix(in srgb,var(--surface) 95%,transparent);
+    backdrop-filter:blur(18px);
+    border-top:1px solid var(--line);
+    padding:10px 0 calc(10px + env(safe-area-inset-bottom));
+  }
+  .tab{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;
+    color:var(--muted);padding:3px 0;transition:color .18s ease;
+  }
+  .tab svg{width:22px;height:22px}
+  .tab span{font-size:11px;font-weight:500}
+  .tab[aria-current="page"]{color:#fff}
+  .tab[aria-current="page"] span{font-weight:600}
+
+  .central{
+    flex:0 0 auto;width:54px;height:54px;border-radius:50%;
+    display:grid;place-items:center;
+    background:#fff;color:#0E0E10;
+    transform:translateY(-14px);
+    border:4px solid var(--surface);
+    box-shadow:0 6px 20px rgba(0,0,0,.55);
+    transition:transform .16s ease;
+  }
+  .central:hover{transform:translateY(-17px)}
+  .central svg{width:24px;height:24px}
+
+  /* ================= painel de teste ================= */
+
+  .teste{margin:18px var(--pad) 0;padding:15px;background:var(--raised);border-radius:var(--r-g)}
+  .teste h2{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .teste p{margin-top:8px;font-size:12px;line-height:1.5;color:var(--muted)}
+  .teste .campos{display:flex;gap:8px;margin-top:12px}
+  .teste input{
+    flex:1;min-width:0;background:var(--raised2);color:#fff;
+    border:none;border-radius:var(--r-p);padding:11px 13px;font-size:13px;
+  }
+  .teste input::placeholder{color:#6A6A72}
+  .teste .buscar{
+    flex:0 0 auto;background:#fff;color:#0E0E10;
+    font-size:13px;font-weight:600;padding:11px 17px;border-radius:var(--r-p);
+  }
+  .teste .buscar:disabled{opacity:.45;cursor:default}
+  .teste .aviso{margin-top:11px;font-size:11.5px;color:var(--muted);line-height:1.5}
+
+
+  /* ============ modal de adicionar ============ */
+  .modal{
+    position:fixed;inset:0;z-index:60;display:flex;align-items:flex-end;
+    background:rgba(0,0,0,.6);backdrop-filter:blur(3px);
+  }
+  .folha{
+    width:100%;max-width:480px;margin-inline:auto;
+    background:#17171B;border-radius:22px 22px 0 0;
+    padding:18px var(--pad) calc(20px + env(safe-area-inset-bottom));
+    max-height:86vh;overflow-y:auto;
+    animation:subir .26s cubic-bezier(.2,.8,.3,1);
+  }
+  @keyframes subir{from{transform:translateY(100%)}}
+  .folha-topo{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .folha-topo h2{font-size:17px;font-weight:700}
+  .fechar{font-size:26px;line-height:1;color:var(--muted);padding:0 6px}
+
+  .linha-campo{display:flex;gap:8px}
+  .linha-campo input{
+    flex:1;min-width:0;color:#fff;font:inherit;font-size:14px;padding:11px 13px;
+    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+    border-radius:var(--r-p);
+  }
+  .linha-campo input::placeholder{color:#7B7B85}
+  .btn{
+    flex:0 0 auto;font-size:13px;font-weight:600;padding:11px 16px;
+    border-radius:var(--r-p);background:#fff;color:#101014;
+  }
+  .btn:disabled{opacity:.45;cursor:default}
+
+  .res{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    padding:10px 4px;border-bottom:1px solid rgba(255,255,255,.07);
+  }
+  .res img{width:40px;height:53px;object-fit:cover;border-radius:7px;flex:0 0 auto;background:#26262C}
+  .res .semimg{width:40px;height:53px;border-radius:7px;flex:0 0 auto;background:#26262C}
+  .res .n{flex:1;min-width:0;font-size:14px;font-weight:600;line-height:1.3}
+  .res .a{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .res .mais{flex:0 0 auto;font-size:20px;color:var(--muted)}
+
+  .rotulo-secao{
+    margin:18px 0 9px;font-size:11px;font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--muted);
+  }
+  .item-lista{
+    display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+    padding:12px 4px;border-bottom:1px solid rgba(255,255,255,.07);
+  }
+  .item-lista .marcador{
+    width:8px;height:8px;border-radius:50%;flex:0 0 auto;
+    background:rgba(255,255,255,.22);
+  }
+  .item-lista.ativa .marcador{background:#fff}
+  .item-lista .nl{flex:1;min-width:0;font-size:14.5px;font-weight:600}
+  .item-lista.ativa .nl{color:#fff}
+  .item-lista .qt{flex:0 0 auto;font-size:11.5px;color:var(--muted)}
+
+  .apagar{
+    flex:0 0 auto;padding:6px 9px;border-radius:8px;
+    color:var(--muted);font-size:15px;
+  }
+  .apagar:hover{color:#FF6B6B;background:rgba(255,107,107,.12)}
+
+  .btn.secundario{
+    flex:1;background:rgba(255,255,255,.10);color:#fff;
+    border:1px solid rgba(255,255,255,.14);
+  }
+  .caixa-dados{
+    width:100%;margin-top:10px;min-height:110px;resize:vertical;
+    font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.45;
+    color:#fff;background:rgba(0,0,0,.35);
+    border:1px solid rgba(255,255,255,.12);border-radius:var(--r-p);padding:10px;
+  }
+  .banner{
+    background:#F5C93A;color:#1A1400;
+    padding:10px var(--pad);font-size:12.5px;font-weight:600;line-height:1.35;
+  }
+  .vazio{padding:26px 4px;font-size:13px;color:var(--muted);text-align:center;grid-column:1/-1}
+  .escondido{display:none}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <div class="identidade">
+    <h1 class="nome-lista">Coop com a Giulia</h1>
+    <button class="trocar" id="btn-trocar">Trocar ▾</button>
+  </div>
+
+  <div class="painel">
+    <div class="membros" aria-label="Você e Giulia">
+      <div class="avatar eu"></div>
+      <div class="avatar outro"></div>
+    </div>
+
+    <div class="metricas">
+      <button class="metrica m-jogando"    data-f="jogando"    aria-pressed="false"><span class="num" id="n-jogando">0</span><span class="rot">Jogando</span></button>
+      <button class="metrica m-espera"     data-f="espera"     aria-pressed="false"><span class="num" id="n-espera">0</span><span class="rot">Em espera</span></button>
+      <button class="metrica m-pausado"    data-f="pausado"    aria-pressed="false"><span class="num" id="n-pausado">0</span><span class="rot">Pausado</span></button>
+      <button class="metrica m-finalizado" data-f="finalizado" aria-pressed="false"><span class="num" id="n-finalizado">0</span><span class="rot">Finalizado</span></button>
+      <button class="metrica m-indefinido" data-f="indefinido" aria-pressed="false"><span class="num" id="n-indefinido">0</span><span class="rot">Sem status</span></button>
+    </div>
+  </div>
+</header>
+
+<div class="controles">
+  <div class="modos" role="group" aria-label="Modo de exibição">
+    <button class="modo" id="btn-grade" aria-pressed="true" aria-label="Grade">
+      <svg viewBox="0 0 16 16" fill="currentColor"><rect x="0" y="0" width="6.5" height="6.5" rx="1"/><rect x="9.5" y="0" width="6.5" height="6.5" rx="1"/><rect x="0" y="9.5" width="6.5" height="6.5" rx="1"/><rect x="9.5" y="9.5" width="6.5" height="6.5" rx="1"/></svg>
+    </button>
+    <button class="modo" id="btn-lista" aria-pressed="false" aria-label="Lista detalhada">
+      <svg viewBox="0 0 16 16" fill="currentColor"><rect x="0" y="1" width="16" height="2" rx="1"/><rect x="0" y="7" width="16" height="2" rx="1"/><rect x="0" y="13" width="16" height="2" rx="1"/></svg>
+    </button>
+  </div>
+  <button class="pref" id="btn-pref" aria-label="Trocar estilo da marca de status">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M3 12h18"/></svg>
+    <span id="pref-txt">Canto</span>
+  </button>
+</div>
+
+<p class="dica">toque num jogo para mudar o status</p>
+
+<main>
+  <div class="grade" id="grade"></div>
+  <div class="lista escondido" id="lista"></div>
+
+  <section class="teste">
+    <h2>Configuração</h2>
+    <p>Sua chave da RAWG fica guardada só neste app, no seu dispositivo. Digite uma vez.</p>
+    <div class="linha-campo">
+      <input id="chave" type="password" placeholder="chave da RAWG" autocomplete="off" aria-label="Chave da RAWG">
+      <button class="btn" id="btn-chave">Salvar</button>
+    </div>
+    <p class="aviso" id="aviso"></p>
+
+    <p class="rotulo-secao">Seus dados</p>
+    <div class="linha-campo">
+      <button class="btn secundario" id="btn-exportar">Exportar</button>
+      <button class="btn secundario" id="btn-importar">Importar</button>
+    </div>
+    <textarea id="dados" class="caixa-dados escondido" spellcheck="false" aria-label="Dados em texto"></textarea>
+    <p class="aviso" id="aviso-dados"></p>
+  </section>
+</main>
+
+<nav class="tabbar" aria-label="Navegação principal">
+  <button class="tab" aria-current="page">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <rect x="3" y="4" width="18" height="5" rx="1.5"/>
+      <rect x="3" y="12.5" width="18" height="5" rx="1.5"/>
+      <path d="M6 20.5h12"/>
+    </svg>
+    <span>Listas</span>
+  </button>
+
+  <button class="central" id="abrir" aria-label="Adicionar jogo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+      <path d="M12 5v14M5 12h14"/>
+    </svg>
+  </button>
+
+  <button class="tab">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <circle cx="12" cy="8" r="3.6"/>
+      <path d="M4.8 20c.9-3.7 3.8-5.6 7.2-5.6s6.3 1.9 7.2 5.6"/>
+    </svg>
+    <span>Perfil</span>
+  </button>
+</nav>
+
+<div class="modal escondido" id="modal-listas">
+  <div class="folha">
+    <div class="folha-topo">
+      <h2>Suas listas</h2>
+      <button class="fechar" id="fechar-listas" aria-label="Fechar">&times;</button>
+    </div>
+    <div id="caixa-listas"></div>
+    <p class="rotulo-secao">Nova lista</p>
+    <div class="linha-campo">
+      <input id="nome-lista" type="text" placeholder="ex: Coop com a Giulia" autocomplete="off" aria-label="Nome da nova lista">
+      <button class="btn" id="btn-criar">Criar</button>
+    </div>
+    <p class="aviso" id="aviso-lista"></p>
+  </div>
+</div>
+
+<div class="modal escondido" id="modal">
+  <div class="folha">
+    <div class="folha-topo">
+      <h2>Adicionar jogo</h2>
+      <button class="fechar" id="fechar" aria-label="Fechar">&times;</button>
+    </div>
+    <div class="linha-campo">
+      <input id="busca" type="text" placeholder="nome do jogo" autocomplete="off" aria-label="Buscar jogo">
+      <button class="btn" id="btn-buscar">Buscar</button>
+    </div>
+    <p class="aviso" id="aviso-busca"></p>
+    <div id="resultados"></div>
+  </div>
+</div>
+
+<script>
+/* ciclo = vida real do jogo. ordem de exibicao e outra, definida em ORDEM. */
+const ESTADOS = ['indefinido','espera','jogando','pausado','finalizado'];
+const NOMES   = {
+  indefinido:'Sem status', espera:'Em espera', jogando:'Jogando',
+  pausado:'Pausado', finalizado:'Finalizado'
+};
+/* ordem pedida: jogando, espera, pausado, finalizado, sem status */
+const ORDEM = {jogando:0, espera:1, pausado:2, finalizado:3, indefinido:4};
+
+const ICONES = {
+  jogando:    '<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>',
+  espera:     '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>',
+  pausado:    '<path d="M9 5v14M15 5v14"/>',
+  finalizado: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  indefinido: '<path d="M9.2 9a2.9 2.9 0 115.6 1c0 1.9-2.8 2.2-2.8 4"/><circle cx="12" cy="17.6" r=".9" fill="currentColor" stroke="none"/>'
+};
+const svgMarca = s =>
+  `<span class="marca" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ICONES[s]}</svg></span>`;
+
+let filtro = null;          /* null = mostrar tudo */
+let estiloMarca = 'canto';  /* preferencia de quem olha, nao do item */
+
+let jogos = [];
+let chaveRAWG = '';
+
+const grade = document.getElementById('grade');
+const lista = document.getElementById('lista');
+const btnGrade = document.getElementById('btn-grade');
+const btnLista = document.getElementById('btn-lista');
+
+
+function desenhar(){
+  grade.innerHTML = '';
+  lista.innerHTML = '';
+
+  const visiveis = jogos
+    .map((j,i) => ({j,i}))
+    .filter(o => !filtro || o.j.s === filtro)
+    .sort((a,b) => ORDEM[a.j.s] - ORDEM[b.j.s]);
+
+  if(!visiveis.length){
+    const msg = jogos.length
+      ? 'Nenhum jogo com esse status.'
+      : 'Sua lista está vazia. Toque no + para adicionar o primeiro.';
+    grade.innerHTML = '<p class="vazio">' + msg + '</p>';
+    lista.innerHTML = '<p class="vazio">' + msg + '</p>';
+  }
+
+  visiveis.forEach(({j,i}, pos) => {
+    const ordem = pos;
+    const atraso = `animation-delay:${ordem*28}ms`;
+    const rotulo = `${j.t}, ${NOMES[j.s]}. Tocar para mudar.`;
+
+    const card = document.createElement('button');
+    card.className = `card st-${j.s}${j.capa ? '' : ' sem-capa'}`;
+    card.setAttribute('style', atraso);
+    card.setAttribute('aria-label', rotulo);
+    card.innerHTML = `
+      <div class="capa${j.capa ? ' tem-imagem' : ''}">
+        <span class="arte">${j.t}</span>
+        ${j.capa ? `<img src="${j.capa}" alt="" loading="lazy" onerror="this.closest('.capa').classList.remove('tem-imagem');this.remove()">` : ''}
+        <span class="lombada"></span>
+        ${svgMarca(j.s)}
+      </div>
+      <div class="titulo">${j.t}</div>`;
+    card.onclick = () => ciclar(i);
+    grade.appendChild(card);
+
+    const linha = document.createElement('button');
+    linha.className = `linha st-${j.s}`;
+    linha.setAttribute('style', atraso);
+    linha.setAttribute('aria-label', rotulo);
+    linha.innerHTML = `
+      <div class="mini">
+        ${j.capa ? `<img src="${j.capa}" alt="" loading="lazy" onerror="this.remove()">` : ''}
+        <span class="lombada"></span>
+      </div>
+      <div class="info">
+        <div class="nome">${j.t}</div>
+        <div class="sub">adicionado por ${j.por}</div>
+      </div>
+      <div class="etiqueta"><span class="ponto"></span>${NOMES[j.s]}</div>
+      <button class="apagar" aria-label="Remover ${j.t}">&#10005;</button>`;
+
+    linha.querySelector('.info').onclick    = () => ciclar(i);
+    linha.querySelector('.mini').onclick    = () => ciclar(i);
+    linha.querySelector('.etiqueta').onclick = () => ciclar(i);
+    linha.querySelector('.apagar').onclick = e => {
+      e.stopPropagation();
+      if(confirm(`Remover "${j.t}" da lista?`)) apagar(i);
+    };
+    lista.appendChild(linha);
+  });
+
+  contar();
+}
+
+async function ciclar(i){
+  const atual = ESTADOS.indexOf(jogos[i].s);
+  jogos[i].s = ESTADOS[(atual + 1) % ESTADOS.length];
+  desenhar();
+  await salvarJogos();
+}
+
+async function apagar(i){
+  jogos.splice(i, 1);
+  desenhar();
+  await salvarJogos();
+}
+
+function contar(){
+  ESTADOS.forEach(e => {
+    const el = document.getElementById('n-'+e);
+    if(el) el.textContent = jogos.filter(j => j.s === e).length;
+  });
+  document.querySelectorAll('.metrica').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.f === filtro));
+  });
+}
+
+/* metricas sao os filtros: tocar liga, tocar de novo desliga */
+document.querySelectorAll('.metrica').forEach(b => {
+  b.onclick = () => {
+    filtro = (filtro === b.dataset.f) ? null : b.dataset.f;
+    desenhar();
+  };
+});
+
+/* preferencia de exibicao da marca — por pessoa, nao pelo item */
+const btnPref = document.getElementById('btn-pref');
+const prefTxt = document.getElementById('pref-txt');
+btnPref.onclick = () => {
+  estiloMarca = estiloMarca === 'canto' ? 'barra' : 'canto';
+  document.body.dataset.marca = estiloMarca;
+  prefTxt.textContent = estiloMarca === 'canto' ? 'Canto' : 'Barra';
+  guardar(K_PREF, estiloMarca).catch(()=>{});
+};
+document.body.dataset.marca = estiloMarca;
+
+function modo(ehGrade){
+  btnGrade.setAttribute('aria-pressed', ehGrade);
+  btnLista.setAttribute('aria-pressed', !ehGrade);
+  grade.classList.toggle('escondido', !ehGrade);
+  lista.classList.toggle('escondido', ehGrade);
+}
+btnGrade.onclick = () => modo(true);
+btnLista.onclick = () => modo(false);
+
+/* ---------- armazenamento ---------- */
+
+const K_DADOS = 'backlog:dados';   /* listas + jogos, tudo junto: uma escrita so */
+const K_JOGOS = 'backlog:jogos';   /* formato antigo, so para migrar */
+const K_CHAVE = 'backlog:chave';
+const K_PREF  = 'backlog:pref';
+
+let listas = [];      /* [{id, nome}] */
+let ativa  = null;    /* id da lista aberta */
+let acervo = {};      /* {idDaLista: [jogos]} */
+
+const novoId = () => 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+
+/* o cofre so existe dentro do Claude. fora dele, o app roda em memoria. */
+/* =========================================================
+   CAMADA DE DADOS
+   Trocar so este bloco quando entrar o Supabase.
+   O resto do app so conhece ler() e guardar().
+   ========================================================= */
+
+const TEM_COFRE = (() => {
+  try{
+    localStorage.setItem('backlog:teste','1');
+    localStorage.removeItem('backlog:teste');
+    return true;
+  }catch(e){ return false; }
+})();
+
+function avisarModo(){
+  if(TEM_COFRE) return;
+  const b = document.createElement('div');
+  b.className = 'banner';
+  b.textContent = 'Este navegador bloqueou o armazenamento (janela anônima?). O app funciona, mas nada será salvo.';
+  document.body.prepend(b);
+}
+
+async function guardar(chave, valor){
+  if(!TEM_COFRE) return false;
+  try{ localStorage.setItem(chave, JSON.stringify(valor)); return true; }
+  catch(e){ console.error('nao salvou', e); return false; }
+}
+
+async function ler(chave, padrao){
+  if(!TEM_COFRE) return padrao;
+  try{
+    const b = localStorage.getItem(chave);
+    return b === null ? padrao : JSON.parse(b);
+  }catch(e){ return padrao; }
+}
+
+async function salvarJogos(){
+  acervo[ativa] = jogos;
+  await guardar(K_DADOS, {listas, ativa, acervo});
+}
+
+/* ---------- chave ---------- */
+
+const aviso = document.getElementById('aviso');
+document.getElementById('btn-chave').onclick = async () => {
+  chaveRAWG = document.getElementById('chave').value.trim();
+  try{
+    const ok = await guardar(K_CHAVE, chaveRAWG);
+    aviso.textContent = ok
+      ? (chaveRAWG ? 'Chave guardada.' : 'Chave apagada.')
+      : 'Chave vale só para esta sessão — abra o app dentro do Claude para guardá-la.';
+  }catch(e){ aviso.textContent = 'Não consegui guardar: ' + e.message; }
+};
+
+/* ---------- adicionar jogo ---------- */
+
+const modal   = document.getElementById('modal');
+const campoB  = document.getElementById('busca');
+const avisoB  = document.getElementById('aviso-busca');
+const caixaR  = document.getElementById('resultados');
+
+document.getElementById('abrir').onclick = () => {
+  modal.classList.remove('escondido');
+  caixaR.innerHTML = '';
+  avisoB.textContent = chaveRAWG ? '' : 'Sem chave da RAWG você ainda pode adicionar só pelo título.';
+  campoB.value = '';
+  campoB.focus();
+};
+document.getElementById('fechar').onclick = () => modal.classList.add('escondido');
+modal.onclick = e => { if(e.target === modal) modal.classList.add('escondido'); };
+
+async function adicionar(titulo, capa){
+  jogos.push({t:titulo, s:'indefinido', por:'você', capa:capa || null});
+  await salvarJogos();
+  modal.classList.add('escondido');
+  desenhar();
+}
+
+document.getElementById('btn-buscar').onclick = async () => {
+  const termo = campoB.value.trim();
+  if(!termo){ avisoB.textContent = 'Digite um nome.'; return; }
+
+  /* sem chave: adiciona direto, sem capa */
+  if(!chaveRAWG){ adicionar(termo, null); return; }
+
+  avisoB.textContent = 'Buscando…';
+  caixaR.innerHTML = '';
+  try{
+    const url = 'https://api.rawg.io/api/games?key=' + encodeURIComponent(chaveRAWG)
+              + '&search=' + encodeURIComponent(termo) + '&page_size=8';
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const achados = d.results || [];
+    avisoB.textContent = achados.length ? '' : 'Nada encontrado.';
+
+    achados.forEach(g => {
+      const b = document.createElement('button');
+      b.className = 'res';
+      const ano = g.released ? g.released.slice(0,4) : '—';
+      b.innerHTML = (g.background_image
+          ? `<img src="${g.background_image}" alt="">`
+          : `<span class="semimg"></span>`)
+        + `<span class="n">${g.name}<span class="a">${ano}</span></span>`
+        + `<span class="mais">+</span>`;
+      b.onclick = () => adicionar(g.name, g.background_image || null);
+      caixaR.appendChild(b);
+    });
+
+    /* sempre deixa a saída manual disponível */
+    const manual = document.createElement('button');
+    manual.className = 'res';
+    manual.innerHTML = `<span class="semimg"></span>`
+      + `<span class="n">Adicionar "${termo}" sem capa<span class="a">nenhum resultado serve</span></span>`
+      + `<span class="mais">+</span>`;
+    manual.onclick = () => adicionar(termo, null);
+    caixaR.appendChild(manual);
+
+  }catch(e){
+    avisoB.textContent = 'Falhou: ' + e.message + '. Você ainda pode adicionar só pelo título.';
+    const manual = document.createElement('button');
+    manual.className = 'res';
+    manual.innerHTML = `<span class="semimg"></span><span class="n">Adicionar "${termo}" sem capa</span><span class="mais">+</span>`;
+    manual.onclick = () => adicionar(termo, null);
+    caixaR.appendChild(manual);
+  }
+};
+campoB.addEventListener('keydown', e => {
+  if(e.key === 'Enter') document.getElementById('btn-buscar').click();
+});
+
+/* ---------- listas ---------- */
+
+const modalL   = document.getElementById('modal-listas');
+const caixaL   = document.getElementById('caixa-listas');
+const campoL   = document.getElementById('nome-lista');
+const avisoL   = document.getElementById('aviso-lista');
+
+function pintarListas(){
+  caixaL.innerHTML = '';
+  listas.forEach(l => {
+    const qt = (acervo[l.id] || []).length;
+    const el = document.createElement('div');
+    el.className = 'item-lista' + (l.id === ativa ? ' ativa' : '');
+    el.innerHTML = `<span class="marcador"></span>
+      <span class="nl">${l.nome}</span>
+      <span class="qt">${qt} ${qt === 1 ? 'jogo' : 'jogos'}</span>
+      <button class="apagar" aria-label="Apagar ${l.nome}">&#10005;</button>`;
+
+    el.querySelector('.nl').onclick = () => trocarPara(l.id);
+    el.querySelector('.qt').onclick = () => trocarPara(l.id);
+    el.querySelector('.apagar').onclick = e => {
+      e.stopPropagation();
+      apagarLista(l.id);
+    };
+    caixaL.appendChild(el);
+  });
+}
+
+async function trocarPara(id){
+  acervo[ativa] = jogos;
+  ativa = id;
+  jogos = acervo[id] || [];
+  filtro = null;
+  modalL.classList.add('escondido');
+  pintarTitulo();
+  desenhar();
+  await salvarJogos();
+}
+
+async function apagarLista(id){
+  if(listas.length === 1){
+    avisoL.textContent = 'Essa é sua única lista — crie outra antes de apagar.';
+    return;
+  }
+  const l = listas.find(x => x.id === id);
+  const qt = (acervo[id] || []).length;
+  const texto = qt
+    ? `Apagar "${l.nome}" e os ${qt} jogos dentro dela? Não dá para desfazer.`
+    : `Apagar "${l.nome}"?`;
+  if(!confirm(texto)) return;
+
+  listas = listas.filter(x => x.id !== id);
+  delete acervo[id];
+  if(ativa === id){
+    ativa = listas[0].id;
+    jogos = acervo[ativa] || [];
+    pintarTitulo();
+    desenhar();
+  }
+  pintarListas();
+  avisoL.textContent = '';
+  await salvarJogos();
+}
+
+document.getElementById('btn-criar').onclick = async () => {
+  const nome = campoL.value.trim();
+  if(!nome){ avisoL.textContent = 'Dê um nome à lista.'; return; }
+  const id = novoId();
+  listas.push({id, nome});
+  acervo[id] = [];
+  campoL.value = '';
+  avisoL.textContent = '';
+  await trocarPara(id);
+};
+campoL.addEventListener('keydown', e => {
+  if(e.key === 'Enter') document.getElementById('btn-criar').click();
+});
+
+document.getElementById('btn-trocar').onclick = () => {
+  avisoL.textContent = '';
+  campoL.value = '';
+  pintarListas();
+  modalL.classList.remove('escondido');
+};
+document.getElementById('fechar-listas').onclick = () => modalL.classList.add('escondido');
+modalL.onclick = e => { if(e.target === modalL) modalL.classList.add('escondido'); };
+
+/* ---------- exportar / importar ---------- */
+
+const areaDados = document.getElementById('dados');
+const avisoD    = document.getElementById('aviso-dados');
+
+document.getElementById('btn-exportar').onclick = () => {
+  acervo[ativa] = jogos;
+  areaDados.value = JSON.stringify({listas, ativa, acervo}, null, 2);
+  areaDados.classList.remove('escondido');
+  areaDados.select();
+  avisoD.textContent = 'Copie esse texto e guarde onde quiser. É a sua lista inteira.';
+};
+
+document.getElementById('btn-importar').onclick = async () => {
+  if(areaDados.classList.contains('escondido')){
+    areaDados.value = '';
+    areaDados.classList.remove('escondido');
+    areaDados.focus();
+    avisoD.textContent = 'Cole aqui o texto exportado e toque em Importar de novo.';
+    return;
+  }
+  const txt = areaDados.value.trim();
+  if(!txt){ avisoD.textContent = 'Cole o texto primeiro.'; return; }
+  try{
+    const d = JSON.parse(txt);
+    if(!d.listas || !d.listas.length) throw new Error('formato não reconhecido');
+    if(!confirm('Isso substitui tudo que está no app agora. Continuar?')) return;
+    listas = d.listas;
+    acervo = d.acervo || {};
+    ativa  = acervo[d.ativa] !== undefined ? d.ativa : listas[0].id;
+    jogos  = acervo[ativa] || [];
+    areaDados.classList.add('escondido');
+    avisoD.textContent = 'Importado.';
+    pintarTitulo();
+    desenhar();
+    await salvarJogos();
+  }catch(e){
+    avisoD.textContent = 'Não deu para ler: ' + e.message;
+  }
+};
+
+avisarModo();
+carregar();
+
+</script>
+</body>
+</html>
