@@ -1,34 +1,38 @@
-# Backlog — versão web
+# Backlog compartilhado
 
-Página única, sem backend. Os dados ficam no `localStorage` do navegador
-de quem usa. A chave da RAWG é digitada pela própria pessoa e também fica
-só no navegador dela — nunca entra no código.
+App web para acompanhar jogos, livros, filmes e séries — sozinho ou
+compartilhado com outra pessoa.
 
-## Publicar no Vercel
+HTML, CSS e JavaScript puros. Sem framework e sem etapa de build: abrir o
+`index.html` no navegador já funciona.
 
-1. Crie um repositório no GitHub e suba esta pasta (`index.html`, `manifest.json`).
-2. Em vercel.com, "Add New… → Project" e importe o repositório.
-3. Framework Preset: **Other**. Sem build command, sem output directory.
-4. Deploy. Sai um endereço `.vercel.app`.
+## Rodar
 
-Cada `git push` republica sozinho.
+```
+python3 -m http.server 8000
+```
 
-## Usar no celular
+E abrir `http://localhost:8000`. Servir por HTTP em vez de abrir o arquivo
+direto importa: aberto como arquivo local, o navegador bloqueia as chamadas
+às APIs.
 
-Abra o endereço, menu do navegador → "Adicionar à tela inicial".
-Abre em tela cheia, sem barra de endereço.
+## Chaves de API
 
-## Limites conhecidos
+Ficam guardadas no aparelho, em Perfil → Fontes de dados. Não estão no
+código e não devem entrar. Livros (Open Library) não precisa de chave.
 
-- Dados presos a um navegador. Trocou de aparelho, começa vazio.
-  Use Exportar/Importar em Configuração para mover.
-- Não é compartilhado. Cada pessoa tem a própria lista.
-  Compartilhar exige banco de dados — é o próximo passo.
-- Janela anônima bloqueia o armazenamento; o app avisa com uma faixa.
+## Testes
 
-## Quando entrar o Supabase
+```
+npm i -D jsdom
+node teste/nome-do-teste.js
+```
 
-Toda a persistência está isolada num bloco só, no início do `<script>`,
-marcado como CAMADA DE DADOS. São quatro funções: `guardar`, `ler`,
-`salvarJogos` e `carregar`. O resto do app não sabe de onde os dados vêm.
-Trocar `localStorage` por chamadas ao Supabase mexe só ali.
+Os testes carregam a página de verdade e clicam nos elementos.
+
+## Documentação
+
+- `CLAUDE.md` — instruções para trabalho com Claude Code
+- `docs/CONTEXTO.md` — decisões de produto e o motivo de cada uma
+- `docs/design-system.md` — tokens visuais
+- `docs/progress.md` — onde o projeto parou
