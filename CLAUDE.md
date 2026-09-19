@@ -63,9 +63,9 @@ Os tokens vivem em `estilo.css` como CSS Variables e estão documentados em
 
 ## Versionamento
 
-Versão atual: **v67**
+Versão atual: **v68**
 
-- Commit no formato: `v67 — descrição curta`
+- Commit no formato: `v68 — descrição curta`
 - A versão aparece no rodapé da página Sobre e deve subir a cada mudança
   visível ao usuário
 - Atualizar o número aqui e em `docs/progress.md` junto com o commit

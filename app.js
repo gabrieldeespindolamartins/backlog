@@ -330,84 +330,142 @@ const btnLista = document.getElementById('btn-lista');
 
 
 let fimDaEstreia = null;
-let semEntrada = false;   /* redesenho depois de arrastar nao repete a entrada */
 
-function desenhar(opcoes){
-  const soLista = opcoes && opcoes.soLista;
-  const soGrade = opcoes && opcoes.soGrade;
-  const estreia = !semEntrada;
-  /* so mexe no container que esta sendo redesenhado.
-     marcar a grade como estreia sem redesenha-la faria os cards
-     ja existentes tocarem a animacao de entrada de novo. */
-  if(!soLista) grade.classList.toggle('estreando', estreia);
-  if(!soGrade) lista.classList.toggle('estreando', estreia);
-  /* a estreia dura o tempo da propria animacao e sai de cena.
-     se a classe ficasse, qualquer reordenacao futura reanimaria tudo. */
-  clearTimeout(fimDaEstreia);
-  if(estreia) fimDaEstreia = setTimeout(() => {
-    grade.classList.remove('estreando');
-    lista.classList.remove('estreando');
-  }, 900);
-  if(soLista) grade.classList.remove('estreando');
-  if(soGrade) lista.classList.remove('estreando');
-  if(!soLista) grade.innerHTML = '';
-  if(!soGrade) lista.innerHTML = '';
+/* Um no por item, reaproveitado entre as repinturas. Agora que toda mudanca
+   repinta a tela inteira, reconstruir a grade a cada vez recarregaria as
+   imagens e destruiria o card que o dedo esta segurando no meio do arraste.
+   A chave e o proprio objeto do item: reordenar move o objeto, nao o copia. */
+const nosDoItem = new WeakMap();
 
+function nosDe(j){
+  const cache = nosDoItem.get(j);
+  if(cache) return cache;
+
+  const card = document.createElement('button');
+  card.className = 'card';
+  card.innerHTML =
+    '<div class="capa"><span class="arte"></span><span class="lombada"></span>' +
+    svgMarca('indefinido') + '</div><div class="titulo"></div>';
+  /* le o indice AGORA, do proprio elemento. capturar o 'i' da criacao
+     deixa o clique apontando para o jogo errado depois de uma troca. */
+  card.onclick = () => abrirFicha(+card.dataset.i);
+
+  const linha = document.createElement('button');
+  linha.className = 'linha';
+  linha.innerHTML =
+    '<div class="mini"><span class="lombada"></span></div>' +
+    '<div class="info"><div class="nome"></div><div class="sub"></div></div>' +
+    '<div class="etiqueta"><span class="ponto"></span></div>';
+  /* o rotulo do status e um no de texto solto, como sempre foi: dentro de
+     um flex, envolve-lo num span mudaria a conta do gap */
+  linha.querySelector('.etiqueta').appendChild(document.createTextNode(''));
+  linha.onclick = () => abrirFicha(+linha.dataset.i);
+
+  const nos = {card, linha};
+  nosDoItem.set(j, nos);
+  return nos;
+}
+
+/* a URL so e reatribuida quando muda: reatribuir a mesma reinicia o
+   carregamento e a capa pisca a cada repintura */
+function pintarImagem(caixa, url){
+  const atual = caixa.querySelector('img');
+  if(!url){
+    if(atual) atual.remove();
+    caixa.classList.remove('tem-imagem', 'esqueleto');
+    return;
+  }
+  if(atual && atual.getAttribute('src') === url){
+    caixa.classList.add('tem-imagem');
+    return;
+  }
+  if(atual) atual.remove();
+  const im = document.createElement('img');
+  im.alt = '';
+  im.loading = 'lazy';
+  im.onload  = () => caixa.classList.remove('esqueleto');
+  im.onerror = () => { caixa.classList.remove('tem-imagem', 'esqueleto'); im.remove(); };
+  caixa.classList.add('tem-imagem', 'esqueleto');
+  im.src = url;
+  caixa.insertBefore(im, caixa.querySelector('.lombada'));
+}
+
+/* poe os nos na ordem pedida mexendo so no que esta fora do lugar */
+function ordenarNos(caixa, nos){
+  nos.forEach((no, pos) => {
+    if(caixa.children[pos] !== no) caixa.insertBefore(no, caixa.children[pos] || null);
+  });
+  while(caixa.children.length > nos.length) caixa.lastElementChild.remove();
+}
+
+function pintarVazio(caixa){
+  const so = caixa.children.length === 1 && caixa.firstElementChild;
+  if(so && so.classList.contains('vazio')) return;
+  caixa.innerHTML = '<p class="vazio">Nenhum jogo com esse status.</p>';
+}
+
+function desenhar(entrada){
   const visiveis = jogos
     .map((j,i) => ({j,i}))
     .filter(o => !filtro || o.j.s === filtro);
   if(!ordemManual) visiveis.sort((a,b) => ORDEM[a.j.s] - ORDEM[b.j.s]);
 
   if(!visiveis.length){
-    if(!soLista) grade.innerHTML = '<p class="vazio">Nenhum jogo com esse status.</p>';
-    if(!soGrade) lista.innerHTML = '<p class="vazio">Nenhum jogo com esse status.</p>';
+    pintarVazio(grade);
+    pintarVazio(lista);
+  }else{
+    const cards = [], linhas = [];
+    visiveis.forEach(({j,i}, pos) => {
+      const {card, linha} = nosDe(j);
+      const img = imagemGrade(j);
+      const rotulo = `${j.t}, ${NOMES[j.s]}. Tocar para mudar.`;
+      const atraso = entrada ? `animation-delay:${pos*28}ms` : 'animation:none';
+
+      /* classList em vez de className: 'fantasma' e 'copia' pertencem ao
+         arraste e sobreviveriam a uma repintura no meio do gesto */
+      ESTADOS.forEach(e => card.classList.toggle('st-'+e, e === j.s));
+      card.classList.toggle('sem-capa', !img);
+      card.setAttribute('style', atraso);
+      card.setAttribute('aria-label', rotulo);
+      card.dataset.i = i;
+      card.querySelector('.arte').textContent = j.t;
+      card.querySelector('.titulo').textContent = j.t;
+      card.querySelector('.marca svg').innerHTML = ICONES[j.s];
+      pintarImagem(card.querySelector('.capa'), img);
+      cards.push(card);
+
+      ESTADOS.forEach(e => linha.classList.toggle('st-'+e, e === j.s));
+      linha.setAttribute('style', atraso);
+      linha.setAttribute('aria-label', rotulo);
+      linha.dataset.i = i;
+      linha.querySelector('.nome').textContent = j.t;
+      linha.querySelector('.sub').textContent = 'adicionado por ' + j.por;
+      linha.querySelector('.etiqueta').lastChild.nodeValue = NOMES[j.s];
+      pintarImagem(linha.querySelector('.mini'), img);
+      linhas.push(linha);
+    });
+    ordenarNos(grade, cards);
+    ordenarNos(lista, linhas);
   }
 
-  visiveis.forEach(({j,i}, pos) => {
-    const ordem = pos;
-    const atraso = semEntrada ? 'animation:none' : `animation-delay:${ordem*28}ms`;
-    const rotulo = `${j.t}, ${NOMES[j.s]}. Tocar para mudar.`;
+  /* a estreia mora no container, nao no item: mover um no reinicia
+     animacoes CSS, e ela tocaria a cada reordenacao. Tiro e ponho de novo
+     porque duas estreias seguidas nao reiniciariam a animacao sozinhas. */
+  clearTimeout(fimDaEstreia);
+  grade.classList.remove('estreando');
+  lista.classList.remove('estreando');
+  if(entrada){
+    void grade.offsetWidth;
+    grade.classList.add('estreando');
+    lista.classList.add('estreando');
+    /* a estreia dura o tempo da propria animacao e sai de cena.
+       se a classe ficasse, qualquer reordenacao futura reanimaria tudo. */
+    fimDaEstreia = setTimeout(() => {
+      grade.classList.remove('estreando');
+      lista.classList.remove('estreando');
+    }, 900);
+  }
 
-    const card = document.createElement('button');
-    const img = imagemGrade(j);
-    card.className = `card st-${j.s}${img ? '' : ' sem-capa'}`;
-    card.setAttribute('style', atraso);
-    card.setAttribute('aria-label', rotulo);
-    card.dataset.i = i;
-    card.innerHTML = `
-      <div class="capa${img ? ' tem-imagem esqueleto' : ''}">
-        <span class="arte">${j.t}</span>
-        ${img ? `<img src="${img}" alt="" loading="lazy" onload="this.parentNode.classList.remove('esqueleto')" onerror="this.parentNode.classList.remove('tem-imagem','esqueleto');this.remove()">` : ''}
-        <span class="lombada"></span>
-        ${svgMarca(j.s)}
-      </div>
-      <div class="titulo">${j.t}</div>`;
-    /* le o indice AGORA, do proprio elemento. capturar o 'i' da criacao
-       deixa o clique apontando para o jogo errado depois de uma troca. */
-    card.onclick = () => abrirFicha(+card.dataset.i);
-    if(!soLista) grade.appendChild(card);
-
-    const linha = document.createElement('button');
-    linha.className = `linha st-${j.s}`;
-    linha.setAttribute('style', atraso);
-    linha.setAttribute('aria-label', rotulo);
-    linha.dataset.i = i;
-    linha.innerHTML = `
-      <div class="mini${imagemGrade(j) ? ' esqueleto' : ''}">
-        ${imagemGrade(j) ? `<img src="${imagemGrade(j)}" alt="" loading="lazy" onload="this.parentNode.classList.remove('esqueleto')" onerror="this.parentNode.classList.remove('esqueleto');this.remove()">` : ''}
-        <span class="lombada"></span>
-      </div>
-      <div class="info">
-        <div class="nome">${j.t}</div>
-        <div class="sub">adicionado por ${j.por}</div>
-      </div>
-      <div class="etiqueta"><span class="ponto"></span>${NOMES[j.s]}</div>`;
-    linha.onclick = () => abrirFicha(+linha.dataset.i);
-    if(!soGrade) lista.appendChild(linha);
-  });
-
-  contar();
-  semEntrada = false;
   varrerEsqueletos();
 }
 
@@ -446,17 +504,139 @@ function contar(){
   });
 }
 
+/* ================== REPINTURA ==================
+   Um caminho so para a interface inteira. Quem muda dados chama isto e mais
+   nada: nenhum ponto precisa saber quais pedacos da tela dependem do que
+   acabou de mexer.
+
+   Existe por causa da proxima fase: os dados vao mudar sozinhos, vindos do
+   servidor, quando outra pessoa editar a mesma lista. Repintar so o que
+   mudou exige saber o que mudou — e quem recebe uma atualizacao de fora
+   nao sabe.
+
+   'entrada' nao diz o que mudou; diz se a tela merece a animacao de estreia.
+   Trocar de lista merece, marcar uma estrela nao. */
+
+const aberta = el => el && !el.classList.contains('escondido');
+
+/* ---- foco e rolagem atravessam a repintura ----
+   O card e reaproveitado, entao o foco nele sobrevive sozinho. Mas as
+   estrelas, as linhas de status e as listas sao reconstruidas: quem estava
+   com o foco ali sai do documento. Sem devolver o foco, o teclado do celular
+   fecha no meio da digitacao e quem navega por teclado perde o lugar.
+
+   Por isso nao guardo so o elemento: guardo tambem como reencontra-lo — o id
+   quando existe, e a posicao dentro do container quando nao existe. */
+const CAIXAS_FOCO = '#ls-caixa, #ls-tipos, #mb-lista, #st-caixa, #st-copiar, ' +
+                    '#ms-caixa, #grade, #lista, .metricas, #f-estrelas';
+const FOCAVEL = 'button, input, select, textarea, [tabindex]';
+
+function marcarFoco(){
+  const el = document.activeElement;
+  if(!el || el === document.body || !el.closest) return null;
+
+  const marca = {el, id: el.id || null, caixa: null, pos: -1, inicio: null};
+  const caixa = el.closest(CAIXAS_FOCO);
+  if(caixa){
+    marca.caixa = caixa;
+    marca.pos = [...caixa.querySelectorAll(FOCAVEL)].indexOf(el);
+  }
+  /* campo de texto sem o cursor e pior que campo sem foco: o cursor
+     saltaria para o fim da palavra que a pessoa esta digitando */
+  try{
+    if(el.selectionStart !== null && el.selectionStart !== undefined){
+      marca.inicio = el.selectionStart;
+      marca.fim = el.selectionEnd;
+      marca.direcao = el.selectionDirection || 'none';
+    }
+  }catch(e){}   /* input de tipo sem selecao (color, checkbox) lanca aqui */
+  return marca;
+}
+
+/* onde o elemento marcado esta agora — ele mesmo, se sobreviveu; senao o
+   equivalente que ocupou o lugar dele */
+function acharFoco(marca){
+  if(document.contains(marca.el)) return marca.el;
+  if(marca.id){
+    const porId = document.getElementById(marca.id);
+    if(porId) return porId;
+  }
+  if(marca.caixa && marca.pos > -1 && document.contains(marca.caixa))
+    return [...marca.caixa.querySelectorAll(FOCAVEL)][marca.pos] || null;
+  return null;
+}
+
+function devolverFoco(marca){
+  if(!marca) return;
+  const alvo = acharFoco(marca);
+  if(!alvo || !alvo.focus) return;
+  if(alvo !== document.activeElement) alvo.focus({preventScroll:true});
+  if(marca.inicio === null || !alvo.setSelectionRange) return;
+  const fim = Math.min(marca.fim, alvo.value.length);
+  try{ alvo.setSelectionRange(Math.min(marca.inicio, fim), fim, marca.direcao); }catch(e){}
+}
+
+function preservandoFoco(pintar){
+  const marca = marcarFoco();
+  const rolagem = window.scrollY;
+  const folha = document.querySelector('.modal:not(.escondido) .folha');
+  const rolagemFolha = folha ? folha.scrollTop : 0;
+
+  pintar();
+
+  devolverFoco(marca);
+  if(folha && folha.scrollTop !== rolagemFolha) folha.scrollTop = rolagemFolha;
+  if(window.scrollY !== rolagem) window.scrollTo(0, rolagem);
+}
+
+function aplicarEstado(opcoes){
+  const entrada = !!(opcoes && opcoes.entrada);
+  preservandoFoco(() => {
+    document.body.dataset.marca = estiloMarca;
+    pintarNomeLista();
+    pintarAvatares();
+    desenhar(entrada);
+    contar();
+
+    pintarPerfil();
+    pintarChaveTopo();
+    pintarResumoStatus();
+    pintarStatus();
+
+    /* folha fechada nao precisa de conteudo, e a ficha guarda um indice que
+       pode ter deixado de existir — o item removido, por exemplo */
+    const j = jogos[iAberto];
+    if(j && aberta(ficha)){
+      pintarTituloFicha();
+      pintarCapaFicha();
+      pintarCabecalho();
+      document.getElementById('f-por').textContent = 'Adicionado por ' + j.por;
+      /* 'Buscando informacoes…' e a mensagem de erro pertencem a busca em
+         andamento, nao ao estado: repintar por cima apagaria o aviso */
+      if(j.detalhes) pintarDados(j);
+    }
+    if(j && aberta(medit))   pintarPrevias();
+    if(j && aberta(mstatus)) pintarOpcoesStatus();
+    if(aberta(mmembros))     pintarMembros();
+    if(aberta(mlistas)){
+      pintarTiposNovos();
+      /* renomear troca o nome da linha por um campo aberto; repintar aqui
+         destruiria o campo com o texto pela metade */
+      if(!lsCaixa.querySelector('.lst-campo')) pintarListas();
+    }
+  });
+}
+
 /* metricas sao os filtros: tocar liga, tocar de novo desliga */
 document.querySelectorAll('.metrica').forEach(b => {
   b.onclick = () => {
     filtro = (filtro === b.dataset.f) ? null : b.dataset.f;
-    desenhar();
+    aplicarEstado({entrada:true});
   };
 });
 
 /* preferencia de exibicao da marca — por pessoa, nao pelo item.
-   o controle mora no perfil; aqui so o valor inicial. */
-document.body.dataset.marca = estiloMarca;
+   quem pinta e o aplicarEstado; o controle mora no perfil. */
 document.body.dataset.aba = 'listas';
 
 let emGrade = true;
@@ -539,20 +719,6 @@ function pintarTituloFicha(){
   el.insertAdjacentHTML('beforeend', PENA);
 }
 
-/* troca o texto no card e na lista sem reconstruir a tela */
-function renomearNaTela(i, novo){
-  const card = grade.querySelector(`.card[data-i="${i}"]`);
-  if(card){
-    const t = card.querySelector('.titulo');
-    if(t) t.textContent = novo;
-    const a = card.querySelector('.arte');
-    if(a) a.textContent = novo;
-    card.setAttribute('aria-label', `${novo}, ${NOMES[jogos[i].s]}. Tocar para ver.`);
-  }
-  semEntrada = true;
-  desenhar({soLista:true});
-}
-
 /* ---- edicao: um botao, uma folha, tudo que altera o jogo ---- */
 
 const medit = document.getElementById('medit');
@@ -585,8 +751,7 @@ function salvarTitulo(){
   const novo = eTitulo.value.trim();
   if(!novo || novo === jogos[iAberto].t) return;
   jogos[iAberto].t = novo;
-  renomearNaTela(iAberto, novo);
-  pintarTituloFicha();
+  aplicarEstado();
   salvar();
 }
 
@@ -594,10 +759,12 @@ document.getElementById('e-apagar').onclick = async () => {
   const i = iAberto, j = jogos[i];
   if(!confirm(`Remover "${j.t}" da lista?`)) return;
   jogos.splice(i, 1);
+  /* a ficha ainda esta saindo de cena; sem zerar o indice ela repintaria
+     com o item seguinte antes de fechar */
+  iAberto = null;
   fecharFolha(medit);
   fecharFolha(ficha);
-  semEntrada = true;
-  desenhar();
+  aplicarEstado();
   await salvar();
   desfazer(j, i);
 };
@@ -666,29 +833,15 @@ function pintarEstrelas(){
 }
 
 function trocarStatus(novo){
-  const i = iAberto;
-  if(jogos[i].s === novo) return;
-  jogos[i].s = novo;
-  pintarCabecalho();
-
-  /* atualiza o card na grade sem reconstruir nada */
-  const card = grade.querySelector(`.card[data-i="${i}"]`);
-  if(card && ordemManual && !filtro){
-    card.className = `card st-${novo}${imagemGrade(jogos[i]) ? '' : ' sem-capa'}`;
-    const m = card.querySelector('.marca');
-    if(m) m.outerHTML = svgMarca(novo);
-    semEntrada = true;
-    desenhar({soLista:true});
-  }else{
-    semEntrada = true;
-    desenhar();
-  }
+  if(jogos[iAberto].s === novo) return;
+  jogos[iAberto].s = novo;
+  aplicarEstado();
   salvar();
 }
 
 function darNota(n){
   jogos[iAberto].nota = n;
-  pintarEstrelas();
+  aplicarEstado();
   salvar();
 }
 
@@ -785,7 +938,7 @@ async function buscarDetalhes(i){
     const d = await fonte.detalhes(j.rid, chave);
     if(!d) return;
     j.detalhes = d;
-    if(iAberto === i) pintarDados(j);
+    aplicarEstado();
     salvar();
   }catch(e){
     if(iAberto === i)
@@ -854,7 +1007,7 @@ async function adicionar(titulo, capa, rid, destaque, deitada){
               destaque: destaque || capa || null,
               rid: rid || null,
               fonte: rid ? nomeFonteAtiva() : null});
-  fechar(); desenhar(); await salvar();
+  fechar(); aplicarEstado({entrada:true}); await salvar();
 }
 
 /* o campo aberto manda sobre o que ficou guardado: quem acabou de colar
@@ -947,98 +1100,6 @@ document.getElementById('btn-testar').onclick = async () => {
     }
     d.textContent = linhas.join('\n');
   }
-};
-
-async function adicionar(titulo, capa, rid, destaque, deitada){
-  /* guardo de qual fonte veio o id: sem isso, ao abrir a ficha o app nao
-     saberia a quem perguntar os detalhes de um item de outra lista. */
-  jogos.push({t:titulo, s:'indefinido', por:'Gabriel',
-              capa: deitada ? capa : (capa || null),
-              destaque: destaque || capa || null,
-              rid: rid || null,
-              fonte: rid ? nomeFonteAtiva() : null});
-  fechar(); desenhar(); await salvar();
-}
-
-/* o campo aberto manda sobre o que ficou guardado: quem acabou de colar
-   a chave espera que ela valha antes de tocar em Salvar */
-function chaveAtual(){
-  const digitada = document.getElementById('chave').value.trim();
-  if(digitada) chaveRAWG = digitada;
-  const dt = document.getElementById('chave-tmdb').value.trim();
-  if(dt) chaveTMDB = dt;
-  return chaveDaFonte(nomeFonteAtiva());
-}
-
-document.getElementById('btn-buscar').onclick = async () => {
-  const termo = campoB.value.trim();
-  if(!termo){ avisoB.textContent = 'Digite um nome.'; return; }
-
-  const nomeF = nomeFonteAtiva();
-  const fonte = FONTES[nomeF];
-  const chave = chaveDaFonte(nomeF);
-
-  const manual = (t, nota) => {
-    const b = document.createElement('button');
-    b.className = 'res';
-    b.innerHTML = `<span class="semimg"></span><span class="n">Adicionar "${t}" sem capa` +
-      (nota ? `<span class="a">${nota}</span>` : '') + `</span><span class="mais">+</span>`;
-    b.onclick = () => adicionar(t, null);
-    caixaR.appendChild(b);
-  };
-
-  if(fonte.precisaChave && !chave){
-    avisoB.textContent = 'Sem a chave da ' + fonte.nome +
-      '. Cadastre em Perfil → Fontes de dados para buscar capas, ou adicione só pelo título:';
-    caixaR.innerHTML = '';
-    manual(termo);
-    return;
-  }
-
-  avisoB.textContent = 'Buscando…'; caixaR.innerHTML = '';
-  try{
-    const achados = await fonte.buscar(termo, chave);
-    avisoB.textContent = achados.length ? '' : 'Nada encontrado.';
-    achados.forEach(a => {
-      const b = document.createElement('button');
-      b.className = 'res';
-      b.innerHTML = (a.capa ? `<img src="${a.capa}" alt="">` : `<span class="semimg"></span>`)
-        + `<span class="n">${a.titulo}<span class="a">${a.sub || a.ano || '—'}</span></span>`
-        + `<span class="mais">+</span>`;
-      b.onclick = () => adicionar(a.titulo, a.capa, a.id, a.destaque, a.deitada);
-      caixaR.appendChild(b);
-    });
-    manual(termo, 'nenhum resultado serve');
-  }catch(e){
-    avisoB.textContent = 'Busca falhou: ' + e.message
-      + (location.protocol === 'https:' ? '' : ' — abrindo o arquivo direto do celular o navegador costuma bloquear a chamada. Teste pelo Claude ou hospedado.');
-    manual(termo);
-  }
-};
-
-document.getElementById('btn-testar').onclick = async () => {
-  const d = document.getElementById('diag');
-  const k = chaveAtual();
-  const linhas = [];
-  linhas.push('origem: ' + location.protocol + '//' + (location.host || '(arquivo local)'));
-  linhas.push('chave no campo: ' + (k ? k.length + ' caracteres (não mostro o valor)' : 'VAZIA'));
-  if(!k){ d.textContent = linhas.join('\n') + '\nsem chave, nem tentei buscar'; return; }
-
-  const url = 'https://api.rawg.io/api/games?key=' + encodeURIComponent(k) + '&search=hades&page_size=1';
-  linhas.push('chamando a RAWG...');
-  d.textContent = linhas.join('\n');
-  try{
-    const r = await fetch(url);
-    linhas.push('resposta HTTP: ' + r.status + ' ' + r.statusText);
-    const txt = await r.text();
-    linhas.push('tamanho do corpo: ' + txt.length + ' bytes');
-    const limpo = txt.slice(0, 140).replace(/key=[^&"]+/g, 'key=***');
-    linhas.push('inicio: ' + limpo);
-  }catch(e){
-    linhas.push('ERRO: ' + e.name + ' — ' + e.message);
-    linhas.push('erro de rede sem status costuma ser bloqueio de origem (CORS)');
-  }
-  d.textContent = linhas.join('\n');
 };
 
 campoB.addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('btn-buscar').click(); });
@@ -1263,9 +1324,11 @@ function renomearLista(id, linha){
     if(guardarNome && novo && novo !== l.nome){
       l.nome = novo;
       await salvar();
-      pintarNomeLista();
     }
-    pintarListas();
+    /* sai da frente antes da repintura: enquanto o campo existe,
+       aplicarEstado() se recusa a reconstruir a lista */
+    campo.remove();
+    aplicarEstado();
   };
   campo.onblur = () => encerrar(true);
   campo.onkeydown = e => {
@@ -1284,11 +1347,7 @@ async function trocarLista(id){
      aparecem mudam junto com ela */
   aplicarConfigDaLista();
   fecharFolha(mlistas);
-  pintarNomeLista();
-  pintarAvatares();
-  pintarStatus(); pintarChaveTopo(); pintarResumoStatus();
-  semEntrada = false;      /* lista nova merece a animacao de entrada */
-  desenhar();
+  aplicarEstado({entrada:true});   /* lista nova merece a animacao de entrada */
   await salvar();
 }
 
@@ -1314,13 +1373,9 @@ async function apagarLista(id){
     ativa = listas[0].id;
     jogos = acervo[ativa] || [];
     aplicarConfigDaLista();
-    pintarNomeLista();
-    pintarAvatares();
-    semEntrada = true;
-    desenhar();
   }
-  pintarListas();
   lsAviso.textContent = '';
+  aplicarEstado();
   await salvar();
 }
 
@@ -1329,6 +1384,11 @@ let tipoNovo = TIPO_PADRAO;
 function pintarTiposNovos(){
   const caixa = document.getElementById('ls-tipos');
   caixa.innerHTML = '';
+  /* o exemplo do campo acompanha o tipo, senao 'ex: Jogar sozinho'
+     numa lista de livros parece que o app nao entendeu a escolha */
+  lsNome.placeholder = tipoNovo === 'livros' ? 'ex: Ler em 2026'
+                     : tipoNovo === 'telas'  ? 'ex: Ver com a Giulia'
+                     : 'ex: Jogar sozinho';
   Object.keys(TIPOS).forEach(t => {
     const b = document.createElement('button');
     b.className = 'ls-tipo';
@@ -1337,12 +1397,7 @@ function pintarTiposNovos(){
     b.innerHTML = iconeTipo(t) + '<span>' + TIPOS[t].nome + '</span>';
     b.onclick = () => {
       tipoNovo = t;
-      pintarTiposNovos();
-      /* o exemplo do campo acompanha o tipo, senao 'ex: Jogar sozinho'
-         numa lista de livros parece que o app nao entendeu a escolha */
-      lsNome.placeholder = t === 'livros' ? 'ex: Ler em 2026'
-                         : t === 'telas'  ? 'ex: Ver com a Giulia'
-                         : 'ex: Jogar sozinho';
+      aplicarEstado();
     };
     caixa.appendChild(b);
   });
@@ -1441,7 +1496,7 @@ async function alternarMembro(id){
   }
   l.membros = atuais;
   await salvar();
-  pintarMembros(); pintarAvatares();
+  aplicarEstado();
 }
 
 const mmembros = document.getElementById('mmembros');
@@ -1496,28 +1551,7 @@ mcapa.onclick = e => { if(e.target === mcapa) fecharFolha(mcapa); };
 
 async function aplicarCapa(url){
   jogos[iAberto][alvoImagem] = url;
-  pintarPrevias();
-  pintarCapaFicha();
-
-  /* atualiza o card na grade sem reconstruir a tela toda */
-  const naGrade = imagemGrade(jogos[iAberto]);
-  const card = grade.querySelector(`.card[data-i="${iAberto}"]`);
-  if(card){
-    const capa = card.querySelector('.capa');
-    const img  = capa.querySelector('img');
-    if(naGrade){
-      card.classList.remove('sem-capa');
-      capa.classList.add('tem-imagem');
-      if(img) img.src = naGrade;
-      else capa.insertAdjacentHTML('afterbegin', `<img src="${naGrade}" alt="">`);
-    }else{
-      card.classList.add('sem-capa');
-      capa.classList.remove('tem-imagem');
-      if(img) img.remove();
-    }
-  }
-  semEntrada = true;
-  desenhar({soLista:true});
+  aplicarEstado();
   fecharFolha(mcapa);
   await salvar();
 }
@@ -1769,8 +1803,7 @@ async function soltar(ev){
     encerrar();
     const removido = jogos[iOriginal];
     jogos.splice(iOriginal, 1);
-    semEntrada = true;
-    desenhar(); await salvar();
+    aplicarEstado(); await salvar();
     desfazer(removido, iOriginal);
     return;
   }
@@ -1782,16 +1815,11 @@ async function soltar(ev){
   const copia  = jogos.slice();
   naTela.forEach((iAntigo, pos) => { jogos[vagas[pos]] = copia[iAntigo]; });
 
-  /* a grade JA esta na ordem certa na tela.
-     reconstruir tudo so recarregaria as imagens e faria piscar.
-     entao corrijo os indices no lugar e redesenho apenas a lista. */
-  cards.forEach((el, pos) => { el.dataset.i = vagas[pos]; });
-
   if(!ordemManual){ ordemManual = true; atualizarOrdem(); }
-  semEntrada = true;
-  /* o container que voce arrastou ja esta certo na tela; redesenhar
-     ele so recarregaria as imagens. entao redesenho o outro. */
-  desenhar(emGrade ? {soLista:true} : {soGrade:true});
+  /* a repintura reaproveita os nos: o container arrastado ja esta na ordem
+     certa e nao se mexe, e o card que estava no ar continua no documento —
+     e dele que 'encerrar' tira a posicao de pouso. */
+  aplicarEstado();
   encerrar();          /* so agora: precisa da posicao final ja definida */
   await salvar();
 }
@@ -1804,7 +1832,7 @@ function desfazer(jogo, i){
   t.innerHTML = `<span>"${jogo.t}" removido</span><button>Desfazer</button>`;
   t.querySelector('button').onclick = async () => {
     jogos.splice(i, 0, jogo);
-    t.remove(); desenhar(); await salvar();
+    t.remove(); aplicarEstado({entrada:true}); await salvar();
   };
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 6000);
@@ -1842,9 +1870,9 @@ document.addEventListener('touchmove', ev => { if(arr) ev.preventDefault(); }, {
 
 /* ================== ORDEM ================== */
 
+/* so persiste — pintar o perfil e responsabilidade de aplicarEstado */
 function atualizarOrdem(){
-  pintarPerfil();
-  guardar(K_ORDEM, ordemManual);
+  return guardar(K_ORDEM, ordemManual);
 }
 
 /* ================== PERFIL E CONFIGURAÇÕES ================== */
@@ -1913,16 +1941,14 @@ function irParaRaiz(){
   history.go(-(pilhaFolhas.length - i));
 }
 
+/* nao repinto antes de navegar: as paginas ja estao em dia, porque toda
+   mudanca de dados passa por aplicarEstado() */
 document.querySelectorAll('[data-vai]').forEach(b => {
-  b.onclick = () => {
-    pintarPerfil();
-    if(b.dataset.vai === 'pg-status') pintarStatus();
-    irPara(b.dataset.vai);
-  };
+  b.onclick = () => irPara(b.dataset.vai);
 });
 document.querySelectorAll('[data-volta]').forEach(b => { b.onclick = voltarPagina; });
 
-tabPerfil.onclick = () => { pintarPerfil(); irPara('pg-perfil'); };
+tabPerfil.onclick = () => irPara('pg-perfil');
 tabListas.onclick = irParaRaiz;
 pintarPagina();
 
@@ -2003,7 +2029,7 @@ function encerrarBorda(){
   const {destino, valeu} = bd;
   bd = null;
   if(!valeu) return;
-  if(destino === 'perfil'){ pintarPerfil(); irPara('pg-perfil'); }
+  if(destino === 'perfil') irPara('pg-perfil');
   else voltarPagina();
 }
 document.addEventListener('pointerup', encerrarBorda);
@@ -2108,8 +2134,7 @@ function pintarPerfil(){
 document.getElementById('p-ordem').onclick = () => {
   ordemManual = !ordemManual;
   atualizarOrdem();
-  semEntrada = true;
-  desenhar();
+  aplicarEstado();
 };
 /* Uma folha de confirmacao propria: devolve uma promessa, entao quem
    chama espera a resposta como esperaria o confirm() do navegador. */
@@ -2238,8 +2263,7 @@ async function copiarStatusDe(origem){
   guardarConfigDaLista();
   await salvar();
   aplicarConfigDaLista();
-  pintarStatus(); pintarChaveTopo(); pintarResumoStatus();
-  semEntrada = true; desenhar(); contar();
+  aplicarEstado();
 }
 
 /* Desligar um status com jogos e permitido: em vez de travar e mandar a
@@ -2258,14 +2282,11 @@ async function alternarStatus(e, qt){
     jogos.forEach(j => { if(j.s === e) j.s = 'indefinido'; });
     acervo[ativa] = jogos;
     if(filtro === e) filtro = null;
-    await salvar();
-    semEntrada = true;
-    desenhar();
   }
   statusUsados[e] = !statusUsados[e];
   guardarConfigDaLista();
   await salvar();
-  pintarStatus(); pintarResumoStatus(); contar();
+  aplicarEstado();
 }
 
 const chaveTopo = document.getElementById('st-topo');
@@ -2273,10 +2294,10 @@ chaveTopo.onclick = async () => {
   topoIndefinido = !topoIndefinido;
   /* se estava filtrando por ele, o filtro sai junto: senao a pessoa
      ficaria filtrada por um botao que nao existe mais na tela */
-  if(!topoIndefinido && filtro === 'indefinido'){ filtro = null; semEntrada = true; desenhar(); }
+  if(!topoIndefinido && filtro === 'indefinido') filtro = null;
   guardarConfigDaLista();
   await salvar();
-  pintarChaveTopo(); contar();
+  aplicarEstado();
 };
 function pintarChaveTopo(){
   chaveTopo.setAttribute('aria-pressed', String(topoIndefinido));
@@ -2291,8 +2312,7 @@ function pintarResumoStatus(){
 
 document.getElementById('p-marca').onclick = () => {
   estiloMarca = estiloMarca === 'canto' ? 'barra' : 'canto';
-  document.body.dataset.marca = estiloMarca;
-  pintarPerfil();
+  aplicarEstado();
 };
 
 /* ================== INÍCIO ================== */
@@ -2321,7 +2341,6 @@ document.getElementById('p-marca').onclick = () => {
   }
   jogos = acervo[ativa] || [];
   if(renomeou) await salvar();
-  pintarNomeLista();
   chaveRAWG   = await ler(K_CHAVE, '');
   chaveTMDB   = await ler(K_TMDB, '');
   ordemManual = await ler(K_ORDEM, true);
@@ -2343,11 +2362,7 @@ document.getElementById('p-marca').onclick = () => {
   });
   if(migrou) await salvar();
   aplicarConfigDaLista();
-  pintarAvatares();
-  pintarChaveTopo();
-  pintarResumoStatus();
   if(chaveRAWG) document.getElementById('chave').value = chaveRAWG;
   if(chaveTMDB) document.getElementById('chave-tmdb').value = chaveTMDB;
-  atualizarOrdem();
-  desenhar();
+  aplicarEstado({entrada:true});
 })();
